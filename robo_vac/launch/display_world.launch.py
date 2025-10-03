@@ -1,56 +1,60 @@
 import os
-
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
-from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
+    launch_file_dir = os.path.join(get_package_share_directory('turtlebot3_gazebo'), 'launch')
+    pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
+    my_package= 'robo_vac'
 
-    # Declare a launch argument for the world file
-    world_arg = DeclareLaunchArgument(
-        "world",
-        default_value=os.path.join(
-            get_package_share_directory("turtlebot3_gazebo"),
-            "worlds",
-            "turtlebot3_world.world"
+    use_sim_time = LaunchConfiguration('use_sim_time', default='true')
+    x_pose = LaunchConfiguration('x_pose', default='-2.0')
+    y_pose = LaunchConfiguration('y_pose', default='-0.5')
+
+    world = os.path.join(
+        get_package_share_directory(my_package),
+        'worlds',
+        'apartment.world'
+    )
+
+    gzserver_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')
         ),
-        description="Full path to the world file to load"
+        launch_arguments={'world': world}.items()
     )
 
-    world_path = LaunchConfiguration("world")
-
-    # Include Gazebo launch (standard launch file)
-    gazebo_launch_file = os.path.join(
-        get_package_share_directory("gazebo_ros"),
-        "launch",
-        "gazebo.launch.py"
+    gzclient_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')
+        )
     )
 
-    gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(gazebo_launch_file),
-        launch_arguments={"world": world_path}.items(),
+    robot_state_publisher_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(launch_file_dir, 'robot_state_publisher.launch.py')
+        ),
+        launch_arguments={'use_sim_time': use_sim_time}.items()
     )
 
-    # Spawn TurtleBot3 Waffle from SDF (avoids robot_description issue)
-    spawn_turtlebot = Node(
-        package="gazebo_ros",
-        executable="spawn_entity.py",
-        arguments=[
-            "-entity", "turtlebot3_waffle",
-            "-file", os.path.join(
-                get_package_share_directory("turtlebot3_gazebo"),
-                "models", "turtlebot3_waffle_pi", "model.sdf"
-            )
-        ],
-        output="screen"
+    spawn_turtlebot_cmd = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(launch_file_dir, 'spawn_turtlebot3.launch.py')
+        ),
+        launch_arguments={
+            'x_pose': x_pose,
+            'y_pose': y_pose
+        }.items()
     )
 
+    # Launch them all!
     return LaunchDescription([
-        world_arg,
-        gazebo,
-        spawn_turtlebot
+        gzserver_cmd,
+        gzclient_cmd,
+        robot_state_publisher_cmd,
+        spawn_turtlebot_cmd,
     ])
